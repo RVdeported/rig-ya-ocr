@@ -22,9 +22,14 @@ use regex::Regex;
 // Main Yandex Client
 // ================================================================
 
+// for temporary token life tracing - we expecting to reissue every
+// three hours
 const YA_OCR_TOKEN_UPD: TimeDelta = TimeDelta::try_hours(3).unwrap();
 const YA_BASE_URL: &'static str =
   "https://ocr.api.cloud.yandex.net/ocr/v1";
+
+// Current temporary token pattern used by Yandex. Subject to change in
+// https://yandex.cloud/ru/docs/iam/concepts/authorization/iam-token
 const YA_TOKEN_PATTERN: &'static str =
   "t1\\.[A-Z0-9a-z_-]+[=]{0,2}\\.[A-Z0-9a-z_-]{86}[=]{0,2}";
 
@@ -68,7 +73,7 @@ impl Display for YaErr
 impl Error for YaErr {}
 
 // -------------------------------------------------//
-// ClientBuilder                                    //
+// Client                                           //
 // -------------------------------------------------//
 #[derive(Clone)]
 pub struct Client
@@ -87,13 +92,13 @@ pub struct Client
 impl Client
 {
   pub fn from_full(
-    a_base_url: Option<String>,
-    a_api_key: Option<String>,
-    a_token: Option<String>,
-    a_folder: Option<String>,
-    a_tkn_pattern: Option<&str>,
-    a_http_cli: Option<HttpClient>,
-    a_langs: Option<Vec<String>>,
+    a_base_url: Option<String>,     // optional
+    a_api_key: Option<String>,      // or use temp token
+    a_token: Option<String>,        // optional
+    a_folder: Option<String>,       // or use api_key
+    a_tkn_pattern: Option<&str>,    // optional
+    a_http_cli: Option<HttpClient>, // optional
+    a_langs: Option<Vec<String>>,   // ru by default
   ) -> Result<Self, YaErr>
   {
     // deduction of authh type
@@ -651,12 +656,3 @@ impl TryFrom<CompletionResponse>
     })
   }
 }
-
-// ================================================================
-// DeepSeek Completion API
-// ================================================================
-
-// /// `deepseek-chat` completion model
-// pub const DEEPSEEK_CHAT: &str = "deepseek-chat";
-// /// `deepseek-reasoner` completion model
-// pub const DEEPSEEK_REASONER: &str = "deepseek-reasoner";
