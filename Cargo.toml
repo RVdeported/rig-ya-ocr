@@ -1,5 +1,5 @@
 [package]
-name = "ya_ocr_rs"
+name = "rig-ya-ocr"
 version = "0.1.0"
 edition = "2024"
 
