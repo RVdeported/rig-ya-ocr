@@ -9,4 +9,5 @@ pub mod prelude
   pub use rig::client::builder::*;
   pub use rig::client::completion::CompletionModelHandle;
   pub use rig::client::*;
+  pub use rig::message::*;
 }
