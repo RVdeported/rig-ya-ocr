@@ -578,18 +578,29 @@ impl completion::CompletionModel for CompletionModel
         .unwrap()
         .post("/recognizeTextAsync");
 
-      response_init = bld.json(&request).send().await?;
+      response_init = bld
+        .json(&request)
+        .send()
+        .await
+        .expect("Could not init request");
     }
 
     let resp;
     if response_init.status().is_success() {
-      let t = response_init.text().await?;
+      let t = response_init
+        .text()
+        .await
+        .expect("Could not extract text")
+        .to_string();
       tracing::trace!(target: "rig", "Yandex req echo: {}", t);
 
       resp = serde_json::from_str::<AsyncRes>(&t)?;
     } else {
       return Err(CompletionError::ProviderError(
-        response_init.text().await?,
+        response_init
+          .text()
+          .await
+          .unwrap_or("Not known error".to_string()),
       ));
     }
 
@@ -605,7 +616,11 @@ impl completion::CompletionModel for CompletionModel
         let bld =
           <*mut Client>::as_mut(cli).unwrap().get(req.as_str());
 
-        loc_res = bld.json(&req).send().await?;
+        loc_res = bld
+          .json(&req)
+          .send()
+          .await
+          .expect("Could not get response");
       }
 
       if loc_res.status().is_success() {
@@ -615,13 +630,13 @@ impl completion::CompletionModel for CompletionModel
 
       tracing::trace!(
         "Failed to get yandex recogn: {}",
-        loc_res.text().await?
+        loc_res.text().await.unwrap_or("no_text".to_string())
       );
-      thread::sleep(time::Duration::from_millis(400));
+      thread::sleep(time::Duration::from_millis(600));
     }
 
     if response.is_some() {
-      let t = response.unwrap().text().await?;
+      let t = response.unwrap().text().await.unwrap();
       tracing::trace!(target: "rig", "Yandex completion: {}", t);
 
       match serde_json::from_str::<ApiResponse<CompletionResponse>>(
