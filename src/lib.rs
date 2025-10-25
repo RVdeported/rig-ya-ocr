@@ -5,6 +5,7 @@ pub mod ya;
 pub mod prelude
 {
   pub use crate::ya;
+  pub use rig;
   pub use rig::agent::AgentBuilder;
   pub use rig::client::builder::*;
   pub use rig::client::completion::CompletionModelHandle;
