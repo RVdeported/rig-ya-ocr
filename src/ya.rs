@@ -17,6 +17,7 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use crate::schemas::*;
 use chrono::{Local, NaiveDateTime, TimeDelta};
 use regex::Regex;
+use std::{thread, time};
 
 // ================================================================
 // Main Yandex Client
@@ -310,35 +311,35 @@ impl Client
     }
   }
 
-  // pub fn get(&mut self, path: &str) -> reqwest::RequestBuilder
-  // {
-  //   let url =
-  //     format!("{}/{}", self.base_url, path).replace("//", "/");
-  //
-  //   match self.auth_t {
-  //     AuthType::Token => {
-  //       self.upd_token().expect("Could not renew token");
-  //
-  //       self
-  //         .http_client
-  //         .get(url)
-  //         .header("x-data-logging-enabled", "true")
-  //         .header("x-folder-id", self.folder.clone().unwrap())
-  //         .bearer_auth(self.token.clone().unwrap())
-  //     }
-  //     AuthType::ApiKey => self
-  //       .http_client
-  //       .get(url)
-  //       .header("x-data-logging-enabled", "true")
-  //       .header(
-  //         "Authorization",
-  //         format!("Api-Key {}", self.api_key.clone().unwrap()),
-  //       ),
-  //     AuthType::None => {
-  //       panic!("Auth type for yaOcr is not defined");
-  //     }
-  //   }
-  // }
+  pub fn get(&mut self, path: &str) -> reqwest::RequestBuilder
+  {
+    let url =
+      format!("{}/{}", self.base_url, path).replace("//", "/");
+
+    match self.auth_t {
+      AuthType::Token => {
+        self.upd_token().expect("Could not renew token");
+
+        self
+          .http_client
+          .get(url)
+          .header("x-folder-id", self.folder.clone().unwrap())
+          .header("x-data-logging-enabled", "true")
+          .bearer_auth(self.token.clone().unwrap())
+      }
+      AuthType::ApiKey => self
+        .http_client
+        .get(url)
+        .header("x-data-logging-enabled", "true")
+        .header(
+          "Authorization",
+          format!("Api-Key {}", self.api_key.clone().unwrap()),
+        ),
+      AuthType::None => {
+        panic!("Auth type for yaOcr is not defined");
+      }
+    }
+  }
 }
 
 impl ProviderClient for Client
@@ -570,17 +571,57 @@ impl completion::CompletionModel for CompletionModel
 
     tracing::trace!("Yandex completion request: {:?}", &request);
 
-    let response;
+    let response_init;
     unsafe {
       let cli = &self.client as *const Client as *mut Client;
-      let bld =
-        <*mut Client>::as_mut(cli).unwrap().post("/recognizeText");
+      let bld = <*mut Client>::as_mut(cli)
+        .unwrap()
+        .post("/recognizeTextAsync");
 
-      response = bld.json(&request).send().await?;
+      response_init = bld.json(&request).send().await?;
     }
 
-    if response.status().is_success() {
-      let t = response.text().await?;
+    let resp;
+    if response_init.status().is_success() {
+      let t = response_init.text().await?;
+      tracing::trace!(target: "rig", "Yandex req echo: {}", t);
+
+      resp = serde_json::from_str::<AsyncRes>(&t)?;
+    } else {
+      return Err(CompletionError::ProviderError(
+        response_init.text().await?,
+      ));
+    }
+
+    let mut response = None;
+    let req = format!("/getRecognition?operationId={}", resp.id);
+    tracing::trace!("Sending msg to get reeocg: {}", req);
+    for i in 0..30 {
+      tracing::trace!("Yandex {} attempt to get res", i + 1);
+
+      let loc_res;
+      unsafe {
+        let cli = &self.client as *const Client as *mut Client;
+        let bld =
+          <*mut Client>::as_mut(cli).unwrap().get(req.as_str());
+
+        loc_res = bld.json(&req).send().await?;
+      }
+
+      if loc_res.status().is_success() {
+        response = Some(loc_res);
+        break;
+      }
+
+      tracing::trace!(
+        "Failed to get yandex recogn: {}",
+        loc_res.text().await?
+      );
+      thread::sleep(time::Duration::from_millis(400));
+    }
+
+    if response.is_some() {
+      let t = response.unwrap().text().await?;
       tracing::trace!(target: "rig", "Yandex completion: {}", t);
 
       match serde_json::from_str::<ApiResponse<CompletionResponse>>(
@@ -595,7 +636,9 @@ impl completion::CompletionModel for CompletionModel
         }
       }
     } else {
-      Err(CompletionError::ProviderError(response.text().await?))
+      Err(CompletionError::ProviderError(
+        "Could not get Async results".to_string(),
+      ))
     }
   }
 

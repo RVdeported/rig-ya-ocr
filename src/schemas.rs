@@ -132,3 +132,11 @@ pub struct Picture
   pub bounding_box: BoundingBox,
   pub score: String,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct AsyncRes
+{
+  pub id: String,
+  pub description: String,
+  pub done: bool,
+}
